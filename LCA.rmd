@@ -1,0 +1,128 @@
+---
+title: "CFAS420_CW2:LCA"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+library(cluster)
+library(factoextra)
+library(NbClust)
+library(ggplot2)
+library(gridExtra)
+library(ISLR)
+library(reshape2)
+library(dplyr)
+library(mclust)
+library(poLCA)
+library(flexclust)
+library(skimr)
+library(plyr)
+```
+
+## pre-processing
+
+```{r pre-processing}
+#Because in LCA, we need 3 covariables, thus we need to remove all rows with missing data. 
+#And we also need consider the missing data of 3 covariables. Therefore, we delete missing value firstly, then create new dataframe. 
+df<-read.csv("patient.csv")
+
+df1<-df
+
+#convert -9 to NULL
+df1[df1 == '-9'] <- NA
+#remove rows which includ missing data
+df_omit<-na.omit(df1)
+
+df1<-df[,2:23]
+
+X<-df_omit
+
+#summary(X)
+skim(X)
+```
+
+##Model_Based clustering
+## LCA
+##you can check the AIC,BIC and log-likelihoood for each K by line 72
+
+```{r LCA}
+set.seed(1)
+
+X1<-X
+#get the number of rows
+nrow<-dim(X1)
+K = 4
+# the results of  analysis is stored in this matrix
+metrics <- matrix(,K,4)
+
+#Test K with 1 to 4, and stored result in metric
+for (k in 1:K){
+  poLCA_fit<-  poLCA(cbind(Work, Hobby, Breath, Pain, Sleep, Appetite, Nausea, Vomit, Constipated, Diarrhoea, Tired, Interfere, Concentrate, Tense, Worry, Irritate, Depressed, Memory, Family, Social, Financial) ~ 1,
+                   maxiter=5000,
+                   nclass=k,
+                   nrep=20,
+                   data=X1)
+  metrics[k,] <- c(k, poLCA_fit$llik,poLCA_fit$bic,poLCA_fit$aic)
+}
+
+# Format and display metrics
+metrics <- as.data.frame(metrics)
+colnames(metrics) <- cbind('K','Log-Likelihood','BIC','AIC')
+#print the metrics, and select the number of clusters with lowest BIC
+print(metrics)
+
+
+poLCA_fit<-  poLCA(cbind(Work, Hobby, Breath, Pain, Sleep, Appetite, Nausea, Vomit, Constipated, Diarrhoea, Tired, Interfere, Concentrate, Tense, Worry, Irritate, Depressed, Memory, Family, Social, Financial) ~ 1,
+                   maxiter=5000,
+                   nclass=3,
+                   nrep=20,
+                   data=X1)
+
+
+plot(poLCA_fit)
+```
+
+## LCA with covariates
+
+```{r LCA with covariates}
+#Add additional variable "Sex" as covariable in LCA
+X2<-df_omit[,2:26]
+#t value is used to to assess the chance that we get a parameter of this size by chance
+#p value is used to decide whether covariate is significant
+#Age as covariate
+poLCA_fit_age<-  poLCA(cbind(Work, Hobby, Breath, Pain, Sleep, Appetite, Nausea, Vomit, Constipated, Diarrhoea, Tired, Interfere, Concentrate, Tense, Worry, Irritate, Depressed, Memory, Family, Social, Financial) ~ Age,
+                   maxiter=5000,
+                   nclass=3,
+                   nrep=20,
+                   data=X2)
+pidmat_age <- cbind(1, c(1:1:50))
+exb_age <- exp(pidmat_age %*% poLCA_fit_age$coeff)
+plota_age <- cbind(1, exb_age)/(1 + rowSums(exb_age))
+matplot(1:50, plota_age, main="Class Probability vs Age", xlab="Age", ylab="Pr(Class)")
+
+
+#Sex as covariate
+poLCA_fit_sex<-  poLCA(cbind(Work, Hobby, Breath, Pain, Sleep, Appetite, Nausea, Vomit, Constipated, Diarrhoea, Tired, Interfere, Concentrate, Tense, Worry, Irritate, Depressed, Memory, Family, Social, Financial) ~ Sex,
+                   maxiter=5000,
+                   nclass=3,
+                   nrep=20,
+                   data=X2)
+
+pidmat_sex <- cbind(1, c(1:1:2))
+exb_sex <- exp(pidmat_sex %*% poLCA_fit_sex$coeff)
+plota_sex <- cbind(1, exb_sex)/(1 + rowSums(exb_sex))
+matplot(1:2, plota_sex, main="Class Probability vs Sex", xlab="Sex", ylab="Pr(Class)")
+
+
+#who the repondant lives with as covariate
+poLCA_fit_relation<-  poLCA(cbind(Work, Hobby, Breath, Pain, Sleep, Appetite, Nausea, Vomit, Constipated, Diarrhoea, Tired, Interfere, Concentrate, Tense, Worry, Irritate, Depressed, Memory, Family, Social, Financial) ~ Relationship,
+                   maxiter=5000,
+                   nclass=3,
+                   nrep=20,
+                   data=X2)
+
+pidmat_relation <- cbind(1, c(1:1:4))
+exb_relation <- exp(pidmat_relation %*% poLCA_fit_relation$coeff)
+plota_relation <- cbind(1, exb_relation)/(1 + rowSums(exb_relation))
+matplot(1:4, plota_relation, main="Class Probability vs Relationship", xlab="Relationship", ylab="Pr(Class)")
+```

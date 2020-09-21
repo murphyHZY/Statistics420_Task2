@@ -1,0 +1,171 @@
+---
+title: "cw2_kmeans"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+library(cluster)
+library(factoextra)
+library(NbClust)
+library(ggplot2)
+library(gridExtra)
+library(ISLR)
+library(reshape2)
+library(dplyr)
+library(mclust)
+library(poLCA)
+library(flexclust)
+library(skimr)
+library(plyr)
+
+```
+
+##pre-processing
+
+```{r pre-processing}
+
+df<-read.csv("patient.csv")
+#Because in Kmeans, PAM and GMM, we only need 22 life variables, thus we can create new dataframe firstly, then remove missing data. 
+
+df1<-df[,2:23]
+#convert -9 to NULL
+df1[df1 == '-9'] <- NA
+#remove rows which includ missing data
+df_omit<-na.omit(df1)
+
+X<-df_omit
+
+#summary(X)
+skim(X)
+```
+
+##distance based clustering:
+##Kmeans
+#you can check the kmeans model information by line 72
+#you can check the character of each cluster, such as mean value of each variable in each cluster in line 74
+```{r kmeans}
+#set the number of clusters: K=4
+K=4
+#minimum total within sums of squares, "tot.withiness" is used to select optimal model
+min_tot.withiness=9999
+start_number=0
+seed_num=0
+for(i in 1:30){
+  for (j in 1:10){
+#different seed numbers are tested, in order to avoid local optimum
+    set.seed(j)
+    clust_hat<-kmeans(X,K,iter.max=200,nstart=i)
+#comparing the tot.withiness of each model and get the model with minimize tot.withiness
+    if(min_tot.withiness>clust_hat$tot.withinss){
+      start_number<-i
+      seed_num<-j
+      min_tot.withiness<-clust_hat$tot.withinss
+    }
+  }
+}
+
+#set seed as optimal seed number
+set.seed(seed_num)
+#set optimal start number
+clust_hat<-kmeans(X,K,iter.max=200,nstart=start_number)
+#pinrt model's information
+str(clust_hat)
+#print the mean value of every cluster, to help us understand each cluster
+clust_hat
+#plot the kmeans, because there are 22 variable, in order to visualise it in 2D, 
+#fviz_cluster function perform principal component analysis (PCA) and show the data point based on the first 2 principal components. 
+
+fviz_cluster(clust_hat, data=X,palette = "Set2", ggtheme = theme_minimal())
+```
+
+##distance based clustering:
+##PAM
+##you can check PAM model information in line 108
+##you can check statistic value such as min, max, 1st, 3rd Qu, median of every variable in each cluster by line 118
+
+```{r PAM}
+set.seed(40)
+
+#set the number of clusters: K=4
+pam.res <- pam(X, 4)
+str(pam.res$clusinfo)
+#plot PAM result
+fviz_cluster(pam.res)
+
+#silhouette parameter is used to find optimal K of PAM model,test the K value from 2 to 15
+silhouette<-c(NA)
+for(i in 2:15){
+  pam_sil<-pam(X,k=i)
+  silhouette[i]<-pam_sil$silinfo$avg.width
+}
+#plot the result of average silhouete width
+plot(1:15,silhouette,
+     xlab="Number of clusters",
+     ylab="Silhouette Width")
+lines(1:15,silhouette)
+
+#print information of PAM model
+summary(pam.res)
+#thie comment is used to show medoid of each data point
+X[pam.res$medoids, ]
+
+#reulst is used to print several statistic parameters of pam algorithm result, to help us understand the charactiristics of each cluster
+result_pam_4<-X %>% 
+  mutate(cluster=pam.res$clustering) %>%
+  group_by(cluster) %>%
+  do(the_summary=summary(.))
+
+result_pam_4$the_summary
+
+#set the number of clusters: K=2, and print new PAM model information
+pam_res_2 <- pam(X, 2)
+#plot PAM result by fviz, the first two principle components are used to plot result in 2D space
+fviz_cluster(pam_res_2)
+#reulst is used to print several statistic parameters of pam algorithm result, to help us understand the charactiristics of each cluster
+result_pam_2<-X %>% 
+  mutate(cluster=pam_res_2$clustering) %>%
+  group_by(cluster) %>%
+  do(the_summary=summary(.))
+
+result_pam_2$the_summary
+
+
+```
+
+##Model_Based clustering
+##GMM
+
+```{r Model_Based clustering}
+set.seed(1)
+
+#GMM clustering with 4 clusters
+gmm_fit<-Mclust(X,G=4)
+#summary(gmm_fit)
+gmm_fit$classification
+plot(gmm_fit,what="classification")
+plot(gmm_fit,what="density",dimens=1,main="")
+
+#summary(gmm_fit,parameters=TRUE)
+
+fviz_cluster(gmm_fit,"classification",geom="point",pointsize = 1.5,palette="jco")
+fviz_cluster(gmm_fit,"uncertainty",palette="jco")
+
+#BIC criterion is used to find optimal GMM model, 
+#mclust function test 14 models, and find the optimal model with highest BIC value
+BIC<-mclustBIC(X)
+#VEE is the best model in this case
+plot(BIC)
+#print BIC information of 14 models 
+BIC
+gmm_fit_BIC<-Mclust(X,x=BIC)
+#print GMM model information
+summary(gmm_fit_BIC,parameters=TRUE)
+#plot the GMM clustering
+fviz_cluster(gmm_fit_BIC,"classification",geom="point",pointsize = 1.5,palette="jco")
+```
+
+
+
+
+
+
